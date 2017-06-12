@@ -1,0 +1,223 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Creates 4 VPCs showing associative VPC peering",
+    "Parameters" : {
+        "CidrAddressVPC1" : {
+            "Default" : "10.0",
+            "Description" : "Initial two values for CIDR address for the VPC, which will be expanded X.Y.0.0/16",
+            "Type" : "String",
+            "MinLength" : "3",
+            "MaxLength" : "7",
+            "AllowedPattern" : "[0-9]?[0-9]?[0-9]\\.[0-9]?[0-9]?[0-9]",
+            "ConstraintDescription" : "Must create a valid CIDR"
+        },
+        "CidrAddressVPC2" : {
+            "Default" : "20.0",
+            "Description" : "Initial two values for CIDR address for the VPC, which will be expanded X.Y.0.0/16",
+            "Type" : "String",
+            "MinLength" : "3",
+            "MaxLength" : "7",
+            "AllowedPattern" : "[0-9]?[0-9]?[0-9]\\.[0-9]?[0-9]?[0-9]",
+            "ConstraintDescription" : "Must create a valid CIDR"
+        },
+        "CidrAddressVPC3" : {
+            "Default" : "30.0",
+            "Description" : "Initial two values for CIDR address for the VPC, which will be expanded X.Y.0.0/16",
+            "Type" : "String",
+            "MinLength" : "3",
+            "MaxLength" : "7",
+            "AllowedPattern" : "[0-9]?[0-9]?[0-9]\\.[0-9]?[0-9]?[0-9]",
+            "ConstraintDescription" : "Must create a valid CIDR"
+        },
+        "CidrAddressVPC4" : {
+            "Default" : "40.0",
+            "Description" : "Initial two values for CIDR address for the VPC, which will be expanded X.Y.0.0/16",
+            "Type" : "String",
+            "MinLength" : "3",
+            "MaxLength" : "7",
+            "AllowedPattern" : "[0-9]?[0-9]?[0-9]\\.[0-9]?[0-9]?[0-9]",
+            "ConstraintDescription" : "Must create a valid CIDR"
+        },
+        "VPCPeeringRole" : {
+            "Default" : "",
+            "Description" : "Purpose for the peering, captured in the tag 'Role'",
+            "Type" : "String"
+        },
+        "VPCTemplateURL" : {
+            "Description" : "The URL to the template to create the VPC (see https://github.com/gford1000-aws/vpc/blob/master/create_vpc.cform)",
+            "Type" : "String"
+        } 
+	},
+	"Resources" : {
+        "VPC1" : {
+            "Type" : "AWS::CloudFormation::Stack",
+            "Properties" : {
+                "Parameters" : {
+                    "CidrAddress" : { "Ref" : "CidrAddressVPC1" }
+                },
+                "TemplateURL" : { "Ref" : "VPCTemplateURL" }
+            }
+        },
+        "VPC2" : {
+            "Type" : "AWS::CloudFormation::Stack",
+            "Properties" : {
+                "Parameters" : {
+                    "CidrAddress" : { "Ref" : "CidrAddressVPC2" }
+                },
+                "TemplateURL" : { "Ref" : "VPCTemplateURL" }
+            }
+        },
+        "VPC3" : {
+            "Type" : "AWS::CloudFormation::Stack",
+            "Properties" : {
+                "Parameters" : {
+                    "CidrAddress" : { "Ref" : "CidrAddressVPC3" }
+                },
+                "TemplateURL" : { "Ref" : "VPCTemplateURL" }
+            }
+        },
+        "VPC4" : {
+            "Type" : "AWS::CloudFormation::Stack",
+            "Properties" : {
+                "Parameters" : {
+                    "CidrAddress" : { "Ref" : "CidrAddressVPC4" }
+                },
+                "TemplateURL" : { "Ref" : "VPCTemplateURL" }
+            }
+        },
+        "Peering12" : {
+            "Type" : "AWS::EC2::VPCPeeringConnection",
+            "Properties" : {
+                "PeerVpcId" : { "Fn::GetAtt" : [ "VPC1", "Outputs.VPC" ] },
+                "Tags" : [ 
+                    {
+                        "Key" : "Role",
+                        "Value" : { "Ref" : "VPCPeeringRole" }
+                    }
+                ],
+                "VpcId" : { "Fn::GetAtt" : [ "VPC2", "Outputs.VPC" ] }
+            }
+        },
+        "Peering23" : {
+            "Type" : "AWS::EC2::VPCPeeringConnection",
+            "Properties" : {
+                "PeerVpcId" : { "Fn::GetAtt" : [ "VPC3", "Outputs.VPC" ] },
+                "Tags" : [ 
+                    {
+                        "Key" : "Role",
+                        "Value" : { "Ref" : "VPCPeeringRole" }
+                    }
+                ],
+                "VpcId" : { "Fn::GetAtt" : [ "VPC2", "Outputs.VPC" ] }
+            }
+        },
+        "Peering14" : {
+            "Type" : "AWS::EC2::VPCPeeringConnection",
+            "Properties" : {
+                "PeerVpcId" : { "Fn::GetAtt" : [ "VPC1", "Outputs.VPC" ] },
+                "Tags" : [ 
+                    {
+                        "Key" : "Role",
+                        "Value" : { "Ref" : "VPCPeeringRole" }
+                    }
+                ],
+                "VpcId" : { "Fn::GetAtt" : [ "VPC4", "Outputs.VPC" ] }
+            }
+        },
+        "Peering34" : {
+            "Type" : "AWS::EC2::VPCPeeringConnection",
+            "Properties" : {
+                "PeerVpcId" : { "Fn::GetAtt" : [ "VPC3", "Outputs.VPC" ] },
+                "Tags" : [ 
+                    {
+                        "Key" : "Role",
+                        "Value" : { "Ref" : "VPCPeeringRole" }
+                    }
+                ],
+                "VpcId" : { "Fn::GetAtt" : [ "VPC4", "Outputs.VPC" ] }
+            }
+        },
+        "VPC12Route" : {
+            "Type" : "AWS::EC2::Route",
+            "Properties" : {
+                "DestinationCidrBlock": { "Fn::GetAtt" : [ "VPC2", "Outputs.CidrBlock" ] },
+                "RouteTableId" : { "Fn::GetAtt" : [ "VPC1", "Outputs.PrivateSubnetRouteTable" ] },
+                "VpcPeeringConnectionId" : { "Ref" : "Peering12" }
+            }
+        },
+        "VPC21Route" : {
+            "Type" : "AWS::EC2::Route",
+            "Properties" : {
+                "DestinationCidrBlock": { "Fn::GetAtt" : [ "VPC1", "Outputs.CidrBlock" ] },
+                "RouteTableId" : { "Fn::GetAtt" : [ "VPC2", "Outputs.PrivateSubnetRouteTable" ] },
+                "VpcPeeringConnectionId" : { "Ref" : "Peering12" }
+            }
+        },
+        "VPC14Route" : {
+            "Type" : "AWS::EC2::Route",
+            "Properties" : {
+                "DestinationCidrBlock": { "Fn::GetAtt" : [ "VPC4", "Outputs.CidrBlock" ] },
+                "RouteTableId" : { "Fn::GetAtt" : [ "VPC1", "Outputs.PrivateSubnetRouteTable" ] },
+                "VpcPeeringConnectionId" : { "Ref" : "Peering14" }
+            }
+        },
+        "VPC41Route" : {
+            "Type" : "AWS::EC2::Route",
+            "Properties" : {
+                "DestinationCidrBlock": { "Fn::GetAtt" : [ "VPC1", "Outputs.CidrBlock" ] },
+                "RouteTableId" : { "Fn::GetAtt" : [ "VPC4", "Outputs.PrivateSubnetRouteTable" ] },
+                "VpcPeeringConnectionId" : { "Ref" : "Peering14" }
+            }
+        },
+        "VPC23Route" : {
+            "Type" : "AWS::EC2::Route",
+            "Properties" : {
+                "DestinationCidrBlock": { "Fn::GetAtt" : [ "VPC2", "Outputs.CidrBlock" ] },
+                "RouteTableId" : { "Fn::GetAtt" : [ "VPC3", "Outputs.PrivateSubnetRouteTable" ] },
+                "VpcPeeringConnectionId" : { "Ref" : "Peering23" }
+            }
+        },
+        "VPC32Route" : {
+            "Type" : "AWS::EC2::Route",
+            "Properties" : {
+                "DestinationCidrBlock": { "Fn::GetAtt" : [ "VPC3", "Outputs.CidrBlock" ] },
+                "RouteTableId" : { "Fn::GetAtt" : [ "VPC2", "Outputs.PrivateSubnetRouteTable" ] },
+                "VpcPeeringConnectionId" : { "Ref" : "Peering23" }
+            }
+        },
+        "VPC43Route" : {
+            "Type" : "AWS::EC2::Route",
+            "Properties" : {
+                "DestinationCidrBlock": { "Fn::GetAtt" : [ "VPC3", "Outputs.CidrBlock" ] },
+                "RouteTableId" : { "Fn::GetAtt" : [ "VPC4", "Outputs.PrivateSubnetRouteTable" ] },
+                "VpcPeeringConnectionId" : { "Ref" : "Peering34" }
+            }
+        },
+        "VPC34Route" : {
+            "Type" : "AWS::EC2::Route",
+            "Properties" : {
+                "DestinationCidrBlock": { "Fn::GetAtt" : [ "VPC4", "Outputs.CidrBlock" ] },
+                "RouteTableId" : { "Fn::GetAtt" : [ "VPC3", "Outputs.PrivateSubnetRouteTable" ] },
+                "VpcPeeringConnectionId" : { "Ref" : "Peering34" }
+            }
+        }
+    },
+    "Outputs" : {
+        "VPC1" : {
+            "Description" : "The first VPC",
+            "Value" : { "Fn::GetAtt" : [ "VPC1", "Outputs.VPC" ] }
+        }, 
+        "VPC2" : {
+            "Description" : "The second VPC",
+            "Value" : { "Fn::GetAtt" : [ "VPC2", "Outputs.VPC" ] }
+        },
+        "VPC3" : {
+            "Description" : "The third VPC",
+            "Value" : { "Fn::GetAtt" : [ "VPC3", "Outputs.VPC" ] }
+        }, 
+        "VPC4" : {
+            "Description" : "The fourth VPC",
+            "Value" : { "Fn::GetAtt" : [ "VPC4", "Outputs.VPC" ] }
+        }
+    }
+}
