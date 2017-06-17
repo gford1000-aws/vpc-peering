@@ -1,0 +1,165 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Creates a JumpBox VPC and a Private VPC, then peers them together",
+    "Parameters" : {
+        "AllowedCIDRRangeToJumpBox" : {
+            "Description" : "CIDR range for clients to access the JumpBox VPC via SSH or RDP",
+            "Type" : "String",
+            "MinLength" : "10",
+            "MaxLength" : "18",
+            "AllowedPattern" : "[0-9]?[0-9]?[0-9]\\.[0-9]?[0-9]?[0-9]\\.[0-9]?[0-9]?[0-9]\\.[0-9]?[0-9]?[0-9]/[1-3][0-9]",
+            "ConstraintDescription" : "Must be a valid CIDR",
+            "NoEcho" : "true"
+        },
+        "InstanceAmiId" : {
+            "Description" : "The AMI to be used for the JumpBox",
+            "Type" : "String",
+            "NoEcho" : "true"
+        },
+        "InstanceType" : {
+            "Description" : "The Instance Type to be used for the JumpBox",
+            "Default" : "t2.micro",
+            "Type" : "String"
+        },
+        "JumpBoxCidrAddress" : {
+            "Default" : "10.0",
+            "Description" : "Initial two values for CIDR address for the JumpBox VPC, which will be expanded X.Y.0.0/16",
+            "Type" : "String",
+            "MinLength" : "3",
+            "MaxLength" : "7",
+            "AllowedPattern" : "[0-9]?[0-9]?[0-9]\\.[0-9]?[0-9]?[0-9]",
+            "ConstraintDescription" : "Must create a valid CIDR"
+        },
+        "JumpBoxTemplateURL" : {
+            "Description" : "The URL to the template to create the JumpBox VPC (see https://github.com/gford1000-aws/robust-jumpbox-in-isolated-vpc/blob/master/create_jumpbox_asg_in_vpc.cform)",
+            "Type" : "String"
+        },
+        "KeyName" : {
+            "Description" : "The KeyName to access the JumpBox",
+            "Type" : "String",
+            "NoEcho" : "true"
+        },
+        "PrivateVPCCidrAddress" : {
+            "Default" : "172.0",
+            "Description" : "Initial two values for CIDR address for the Private VPC, which will be expanded X.Y.0.0/16",
+            "Type" : "String",
+            "MinLength" : "3",
+            "MaxLength" : "7",
+            "AllowedPattern" : "[0-9]?[0-9]?[0-9]\\.[0-9]?[0-9]?[0-9]",
+            "ConstraintDescription" : "Must create a valid CIDR"
+        },
+        "VPCPeeringRole" : {
+            "Default" : "",
+            "Description" : "Purpose for the peering, captured in the tag 'Role'",
+            "Type" : "String"
+        },
+        "VPCTemplateURL" : {
+            "Description" : "The URL to the template to create the VPC (see https://github.com/gford1000-aws/vpc/blob/master/create_vpc.cform)",
+            "Type" : "String"
+        }
+	},
+	"Resources" : {
+        "PrivateVPC" : {
+            "Type" : "AWS::CloudFormation::Stack",
+            "Properties" : {
+                "Parameters" : { 
+                    "CidrAddress" : { "Ref" : "PrivateVPCCidrAddress" }
+                },
+                "TemplateURL" : { "Ref" : "VPCTemplateURL" }
+            }
+        },
+        "JumpBoxVPC" : {
+            "Type" : "AWS::CloudFormation::Stack",
+            "Properties" : {
+                "Parameters" : { 
+                    "AllowedCIDRRange" : { "Ref" : "AllowedCIDRRangeToJumpBox" },
+                    "CidrAddress" : { "Ref" : "JumpBoxCidrAddress" },
+                    "InstanceAmiId" : { "Ref" : "InstanceAmiId" },
+                    "InstanceType" : { "Ref" : "InstanceType" },
+                    "KeyName" : { "Ref" : "KeyName" },
+                    "VPCTemplateURL" : { "Ref" : "VPCTemplateURL" }
+                },
+                "TemplateURL" : { "Ref" : "JumpBoxTemplateURL" }
+            }
+        },
+        "PeeringJumpBoxToPrivate" : {
+            "Type" : "AWS::EC2::VPCPeeringConnection",
+            "Properties" : {
+                "PeerVpcId" : { "Fn::GetAtt" : [ "PrivateVPC", "Outputs.VPC" ] },
+                "Tags" : [ 
+                    {
+                        "Key" : "Role",
+                        "Value" : { "Ref" : "VPCPeeringRole" }
+                    }
+                ],
+                "VpcId" : { "Fn::GetAtt" : [ "JumpBoxVPC", "Outputs.VPC" ] }
+            }
+        },
+        "PrivateVPCRouteToJumpBox" : {
+            "Type" : "AWS::EC2::Route",
+            "Properties" : {
+                "DestinationCidrBlock": { "Fn::GetAtt" : [ "JumpBoxVPC", "Outputs.CidrBlock" ] },
+                "RouteTableId" : { "Fn::GetAtt" : [ "PrivateVPC", "Outputs.PrivateSubnetRouteTable" ] },
+                "VpcPeeringConnectionId" : { "Ref" : "PeeringJumpBoxToPrivate" }
+            }
+        },
+        "JumpBoxVPCRouteToPrivate" : {
+            "Type" : "AWS::EC2::Route",
+            "Properties" : {
+                "DestinationCidrBlock": { "Fn::GetAtt" : [ "PrivateVPC", "Outputs.CidrBlock" ] },
+                "RouteTableId" : { "Fn::GetAtt" : [ "JumpBoxVPC", "Outputs.RouteTable" ] },
+                "VpcPeeringConnectionId" : { "Ref" : "PeeringJumpBoxToPrivate" }
+            }
+        },
+        "JumpBoxEgress3389ToPrivate" : {
+            "Type" : "AWS::EC2::NetworkAclEntry",
+            "Properties" : {
+                "Egress" : "true",
+                "NetworkAclId" : { "Fn::GetAtt" : [ "JumpBoxVPC", "Outputs.VPCNacl" ] },
+                "RuleNumber" : "1100",
+                "RuleAction" : "allow",
+                "Protocol" : "6",
+                "PortRange" : { "From" : "3389", "To" : "3389" },
+                "CidrBlock" : { "Fn::GetAtt" : [ "PrivateVPC", "Outputs.CidrBlock" ] }
+            }
+        },
+        "JumpBoxEgress22ToPrivate" : {
+            "Type" : "AWS::EC2::NetworkAclEntry",
+            "Properties" : {
+                "Egress" : "true",
+                "NetworkAclId" : { "Fn::GetAtt" : [ "JumpBoxVPC", "Outputs.VPCNacl" ] },
+                "RuleNumber" : "1200",
+                "RuleAction" : "allow",
+                "Protocol" : "6",
+                "PortRange" : { "From" : "22", "To" : "22" },
+                "CidrBlock" : { "Fn::GetAtt" : [ "PrivateVPC", "Outputs.CidrBlock" ] }
+            }
+        },
+        "JumpBoxLIngressFromPrivate" : {
+            "Type" : "AWS::EC2::NetworkAclEntry",
+            "Properties" : {
+                "Egress" : "false",
+                "NetworkAclId" : { "Fn::GetAtt" : [ "JumpBoxVPC", "Outputs.VPCNacl" ] },
+                "RuleNumber" : "2100",
+                "RuleAction" : "allow",
+                "Protocol" : "6",
+                "PortRange" : { "From" : "49152", "To" : "65535" },
+                "CidrBlock" : { "Fn::GetAtt" : [ "PrivateVPC", "Outputs.CidrBlock" ] }
+            }
+        }
+    },
+    "Outputs" : {
+        "PrivateVPC" : {
+            "Description" : "The Private VPC",
+            "Value" : { "Fn::GetAtt" : [ "PrivateVPC", "Outputs.VPC" ] }
+        }, 
+        "JumpBoxVPC" : {
+            "Description" : "The JumpBox VPC",
+            "Value" : { "Fn::GetAtt" : [ "JumpBoxVPC", "Outputs.VPC" ] }
+        },
+        "EIP" : {
+            "Description" : "The Elastic IP of the JumpBox",
+            "Value" : { "Fn::GetAtt" : [ "JumpBoxVPC", "Outputs.EIP" ] }
+        }
+    }
+}
